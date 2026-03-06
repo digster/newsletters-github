@@ -7,3 +7,11 @@ Implement the GitHub Pages site for Newsletter Archive. Python build script + cl
 ## 2026-03-05: Fix GitHub Pages Deployment Error
 
 Fix GitHub Pages deployment error by adding `enablement: true` to `actions/configure-pages@v5` in the workflow file, so Pages is auto-enabled on the repository.
+
+## 2026-03-05: Diagnose and Revert Pages Auto-Enablement
+
+why am i getting this error?
+
+ok, remove the enablement option.
+
+Implement the plan.
