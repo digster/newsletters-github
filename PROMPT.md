@@ -19,3 +19,7 @@ Implement the plan.
 ## 2026-03-06: Migrate Email Files to Git LFS
 
 Migrate the 13,652 HTML email files (~883 MB) from regular git objects to Git LFS. Full history rewrite (only 3 commits, single branch). Update CI workflow with LFS checkout + caching. Update README with LFS prerequisite. Update ARCHITECTURE.md with LFS decision.
+
+## 2026-03-06: Read Tracking & Bookmarks (Browser Storage)
+
+Implement client-side read tracking and bookmarks using localStorage. Store module with Set cache, auto-mark-read on viewer open, bookmark toggle button in viewer, read state styling on email lists, read count on homepage cards, bookmarks badge in header, dedicated bookmarks page with search and newsletter labels.

@@ -37,8 +37,9 @@ templates/                   # Source templates (copied to root on build)
   index.html                 # Homepage template
   newsletter.html            # Newsletter listing template
   view.html                  # Email viewer template
+  bookmarks.html             # Bookmarks listing page
   style.css                  # Shared styles
-  app.js                     # Client-side search/nav
+  app.js                     # Client-side search/nav/storage
 data/index.json              # Generated manifest (all email metadata)
 emails/                      # Copied HTML email files
 .github/workflows/deploy.yml # GitHub Pages deployment
@@ -47,9 +48,15 @@ emails/                      # Copied HTML email files
 ## Client-Side Architecture
 
 `app.js` is organized as an IIFE module (`App`) with methods:
-- `initHomepage()` — loads manifest, renders newsletter card grid, binds search
-- `initNewsletter()` — filters manifest by newsletter name, renders date-sorted email list
-- `initViewer()` — sets iframe src, loads prev/next navigation from manifest
+- `initHomepage()` — loads manifest, renders newsletter card grid with read counts, binds search
+- `initNewsletter()` — filters manifest by newsletter name, renders date-sorted email list with read/bookmark state
+- `initViewer()` — sets iframe src, auto-marks email as read, loads prev/next navigation, bookmark toggle
+- `initBookmarks()` — loads bookmarked emails from localStorage, renders with newsletter labels and search
 - `initKeyboard()` — `/` to focus search, `Escape` to blur
+
+Internal `Store` module provides localStorage-backed persistence with in-memory `Set` cache:
+- `nl_read` — tracks read emails (file paths)
+- `nl_bookmarks` — tracks bookmarked emails (file paths)
+- JSON arrays serialized to localStorage, loaded into Sets for O(1) lookups
 
 All data comes from a single `data/index.json` fetch cached in memory.

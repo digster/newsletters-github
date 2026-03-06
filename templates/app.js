@@ -8,6 +8,64 @@ const App = (() => {
   let debounceTimer = null;
 
   // -----------------------------------------------------------
+  // Persistent Storage (localStorage-backed with in-memory Set cache)
+  // -----------------------------------------------------------
+
+  const Store = {
+    _cache: {},
+
+    /** Load a localStorage key into a cached Set (only parses JSON once) */
+    _get(key) {
+      if (!this._cache[key]) {
+        try {
+          this._cache[key] = new Set(JSON.parse(localStorage.getItem(key) || "[]"));
+        } catch {
+          this._cache[key] = new Set();
+        }
+      }
+      return this._cache[key];
+    },
+
+    /** Persist the cached Set back to localStorage */
+    _save(key) {
+      localStorage.setItem(key, JSON.stringify([...this._cache[key]]));
+    },
+
+    // --- Read tracking ---
+    isRead(file)     { return this._get("nl_read").has(file); },
+    markRead(file)   { this._get("nl_read").add(file); this._save("nl_read"); },
+    toggleRead(file) {
+      const s = this._get("nl_read");
+      s.has(file) ? s.delete(file) : s.add(file);
+      this._save("nl_read");
+      return s.has(file);
+    },
+    readCount(files) { const s = this._get("nl_read"); return files.filter(f => s.has(f)).length; },
+
+    // --- Bookmarks ---
+    isBookmarked(file) { return this._get("nl_bookmarks").has(file); },
+    toggleBookmark(file) {
+      const s = this._get("nl_bookmarks");
+      s.has(file) ? s.delete(file) : s.add(file);
+      this._save("nl_bookmarks");
+      return s.has(file);
+    },
+    getBookmarks() { return [...this._get("nl_bookmarks")]; },
+  };
+
+  // -----------------------------------------------------------
+  // SVG Icons (inline to avoid external dependencies)
+  // -----------------------------------------------------------
+
+  const ICON = {
+    bookmarkOutline: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 2.5h9v12L8 11l-4.5 3.5v-12z"/></svg>',
+    bookmarkFilled: '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 2.5h9v12L8 11l-4.5 3.5v-12z"/></svg>',
+    bookmarkSmall: '<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" stroke="currentColor" stroke-width="1.5"><path d="M3.5 2.5h9v12L8 11l-4.5 3.5v-12z"/></svg>',
+    eyeOpen: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+    eyeClosed: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>',
+  };
+
+  // -----------------------------------------------------------
   // Data Loading
   // -----------------------------------------------------------
 
@@ -79,7 +137,7 @@ const App = (() => {
   // Homepage: Newsletter Grid
   // -----------------------------------------------------------
 
-  function renderNewsletterGrid(newsletters, container) {
+  function renderNewsletterGrid(newsletters, container, allEmails) {
     container.innerHTML = "";
 
     if (newsletters.length === 0) {
@@ -98,10 +156,25 @@ const App = (() => {
           ? `${formatDateShort(nl.earliest)} — ${formatDateShort(nl.latest)}`
           : "";
 
+      // Compute read count for this newsletter
+      let readHtml = "";
+      if (allEmails) {
+        const nlFiles = allEmails
+          .filter((e) => e.newsletter === nl.name)
+          .map((e) => e.file);
+        const read = Store.readCount(nlFiles);
+        if (read > 0) {
+          readHtml = `<span class="card__read-count">${read} / ${nl.count} read</span>`;
+        }
+      }
+
       card.innerHTML = `
         <div class="card__name">${escapeHtml(nl.name)}</div>
         <div class="card__meta">
-          <span class="card__count">${nl.count} email${nl.count !== 1 ? "s" : ""}</span>
+          <div>
+            <span class="card__count">${nl.count} email${nl.count !== 1 ? "s" : ""}</span>
+            ${readHtml}
+          </div>
           <span class="card__dates">${dateRange}</span>
         </div>
       `;
@@ -123,7 +196,10 @@ const App = (() => {
         statsEl.textContent = `${data.total_newsletters} newsletters · ${data.total_emails.toLocaleString()} emails`;
       }
 
-      renderNewsletterGrid(data.newsletters, grid);
+      renderNewsletterGrid(data.newsletters, grid, data.emails);
+
+      // Update bookmarks badge count
+      updateBookmarksBadge();
 
       if (searchInput) {
         searchInput.addEventListener(
@@ -131,13 +207,13 @@ const App = (() => {
           debounce((e) => {
             const q = normalizeQuery(e.target.value);
             if (!q) {
-              renderNewsletterGrid(data.newsletters, grid);
+              renderNewsletterGrid(data.newsletters, grid, data.emails);
               return;
             }
             const filtered = data.newsletters.filter((nl) =>
               nl.name.toLowerCase().includes(q)
             );
-            renderNewsletterGrid(filtered, grid);
+            renderNewsletterGrid(filtered, grid, data.emails);
           })
         );
       }
@@ -151,11 +227,12 @@ const App = (() => {
   // Newsletter Page: Email List
   // -----------------------------------------------------------
 
-  function renderEmailList(emails, container) {
+  function renderEmailList(emails, container, options = {}) {
     container.innerHTML = "";
 
     if (emails.length === 0) {
-      container.innerHTML = '<div class="empty-state">No emails found.</div>';
+      const msg = options.emptyMessage || "No emails found.";
+      container.innerHTML = `<div class="empty-state">${msg}</div>`;
       return;
     }
 
@@ -164,8 +241,25 @@ const App = (() => {
       item.href = viewerUrl(email.file, email.newsletter);
       item.className = "email-item";
 
+      // Apply read state styling
+      if (Store.isRead(email.file)) {
+        item.classList.add("email-item--read");
+      }
+
+      // Bookmark indicator
+      const bookmarkHtml = Store.isBookmarked(email.file)
+        ? `<span class="email-item__bookmark" title="Bookmarked">${ICON.bookmarkSmall}</span>`
+        : "";
+
+      // Optionally show newsletter name (for bookmarks page)
+      const nlLabel = options.showNewsletter
+        ? `<span class="email-item__newsletter">${escapeHtml(email.newsletter)}</span>`
+        : "";
+
       item.innerHTML = `
+        ${bookmarkHtml}
         <span class="email-item__date">${formatDate(email.date)}</span>
+        ${nlLabel}
         <span class="email-item__subject">${escapeHtml(email.subject)}</span>
       `;
       container.appendChild(item);
@@ -236,15 +330,38 @@ const App = (() => {
     const backLink = document.getElementById("back-link");
     const prevBtn = document.getElementById("prev-btn");
     const nextBtn = document.getElementById("next-btn");
+    const bookmarkBtn = document.getElementById("bookmark-btn");
+    const readBtn = document.getElementById("read-btn");
 
     if (!file || !iframe) return;
 
     // Set iframe source
     iframe.src = file;
 
+    // Auto-mark email as read
+    Store.markRead(file);
+
     // Back link
     if (backLink && newsletter) {
       backLink.href = newsletterUrl(newsletter);
+    }
+
+    // Read toggle button
+    if (readBtn) {
+      updateReadBtn(readBtn, file);
+      readBtn.addEventListener("click", () => {
+        Store.toggleRead(file);
+        updateReadBtn(readBtn, file);
+      });
+    }
+
+    // Bookmark toggle button
+    if (bookmarkBtn) {
+      updateBookmarkBtn(bookmarkBtn, file);
+      bookmarkBtn.addEventListener("click", () => {
+        Store.toggleBookmark(file);
+        updateBookmarkBtn(bookmarkBtn, file);
+      });
     }
 
     // Load metadata for this email + adjacent navigation
@@ -280,6 +397,84 @@ const App = (() => {
           nextBtn.setAttribute("aria-disabled", "true");
         }
       }
+    });
+  }
+
+  /** Update the read toggle button icon and active state */
+  function updateReadBtn(btn, file) {
+    const read = Store.isRead(file);
+    btn.innerHTML = read ? ICON.eyeOpen : ICON.eyeClosed;
+    btn.classList.toggle("viewer-nav__btn--active", read);
+    btn.title = read ? "Mark as unread" : "Mark as read";
+  }
+
+  /** Update the bookmark button icon and active state */
+  function updateBookmarkBtn(btn, file) {
+    const active = Store.isBookmarked(file);
+    btn.innerHTML = active ? ICON.bookmarkFilled : ICON.bookmarkOutline;
+    btn.classList.toggle("viewer-nav__btn--active", active);
+    btn.title = active ? "Remove bookmark" : "Bookmark";
+  }
+
+  /** Update the bookmarks badge in the header (if present) */
+  function updateBookmarksBadge() {
+    const badge = document.getElementById("bookmarks-badge");
+    if (!badge) return;
+    const count = Store.getBookmarks().length;
+    badge.textContent = count > 0 ? count : "";
+    badge.style.display = count > 0 ? "" : "none";
+  }
+
+  // -----------------------------------------------------------
+  // Bookmarks Page
+  // -----------------------------------------------------------
+
+  function initBookmarks() {
+    const listEl = document.getElementById("bookmarks-list");
+    const searchInput = document.getElementById("search");
+
+    if (!listEl) return;
+
+    listEl.innerHTML = '<div class="loading">Loading bookmarks...</div>';
+
+    loadManifest().then((data) => {
+      const bookmarkedFiles = Store.getBookmarks();
+      let bookmarked = data.emails.filter((e) => bookmarkedFiles.includes(e.file));
+
+      // Sort by date descending
+      bookmarked.sort((a, b) => {
+        if (!a.date) return 1;
+        if (!b.date) return -1;
+        return b.date.localeCompare(a.date);
+      });
+
+      const countEl = document.getElementById("bookmarks-count");
+      if (countEl) countEl.textContent = `${bookmarked.length} bookmarked`;
+
+      const emptyMsg = "No bookmarks yet. Bookmark emails from the viewer.";
+      renderEmailList(bookmarked, listEl, { showNewsletter: true, emptyMessage: emptyMsg });
+
+      if (searchInput) {
+        searchInput.addEventListener(
+          "input",
+          debounce((e) => {
+            const q = normalizeQuery(e.target.value);
+            if (!q) {
+              renderEmailList(bookmarked, listEl, { showNewsletter: true, emptyMessage: emptyMsg });
+              return;
+            }
+            const filtered = bookmarked.filter(
+              (em) =>
+                em.subject.toLowerCase().includes(q) ||
+                em.newsletter.toLowerCase().includes(q)
+            );
+            renderEmailList(filtered, listEl, { showNewsletter: true, emptyMessage: emptyMsg });
+          })
+        );
+      }
+    }).catch((err) => {
+      listEl.innerHTML = '<div class="empty-state">Failed to load data.</div>';
+      console.error(err);
     });
   }
 
@@ -327,6 +522,7 @@ const App = (() => {
     initHomepage,
     initNewsletter,
     initViewer,
+    initBookmarks,
     initKeyboard,
   };
 })();
