@@ -60,3 +60,21 @@ Internal `Store` module provides localStorage-backed persistence with in-memory 
 - JSON arrays serialized to localStorage, loaded into Sets for O(1) lookups
 
 All data comes from a single `data/index.json` fetch cached in memory.
+
+### List-Level Actions (Event Delegation)
+
+Email list rows have inline action buttons (read toggle, bookmark toggle) that modify state without navigating to the viewer. This uses **event delegation**: a single click listener is attached to the list container (not per-button), and `e.target.closest("[data-action]")` identifies the clicked button. `e.preventDefault()` + `e.stopPropagation()` prevents the parent `<a>` link from navigating. The listener is bound once per container via a `_actionsListenerBound` flag to survive re-renders.
+
+Row structure:
+```html
+<a class="email-item" data-file="emails/...">
+  <span class="email-item__content">   <!-- baseline-aligned text wrapper -->
+    <span class="email-item__date">...</span>
+    <span class="email-item__subject">...</span>
+  </span>
+  <span class="email-item__actions">   <!-- right-aligned toggle buttons -->
+    <button data-action="toggle-read">...</button>
+    <button data-action="toggle-bookmark">...</button>
+  </span>
+</a>
+```

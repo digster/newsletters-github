@@ -318,7 +318,7 @@ a:hover {
 
 .email-item {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--sp-4);
   padding: var(--sp-3) var(--sp-4);
   border-radius: var(--radius);
@@ -371,13 +371,52 @@ a:hover {
   color: var(--accent);
 }
 
-/* Bookmark indicator on email list items */
-.email-item__bookmark {
-  color: var(--accent);
+/* Content wrapper — keeps text baseline-aligned while row centers vertically */
+.email-item__content {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-4);
+  flex: 1;
+  min-width: 0;
+}
+
+/* Action buttons container (read toggle, bookmark toggle) */
+.email-item__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
   flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* Individual action button */
+.email-item__action-btn {
   display: inline-flex;
   align-items: center;
-  line-height: 1;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--fg-faint);
+  cursor: pointer;
+  padding: 0;
+  transition: all 150ms var(--ease);
+}
+
+.email-item__action-btn:hover {
+  background: var(--bg-active);
+  color: var(--fg-secondary);
+}
+
+/* Active state for toggled-on buttons */
+.email-item__action-btn--active {
+  color: var(--accent);
+}
+
+.email-item__action-btn--active:hover {
+  color: var(--accent-hover);
 }
 
 /* Newsletter label (used on bookmarks page) */
@@ -525,9 +564,12 @@ a:hover {
     grid-template-columns: 1fr;
   }
 
-  .email-item {
+  .email-item__content {
     flex-direction: column;
     gap: var(--sp-1);
+  }
+
+  .email-item {
     padding: var(--sp-3);
   }
 

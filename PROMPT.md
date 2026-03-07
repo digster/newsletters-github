@@ -23,3 +23,7 @@ Migrate the 13,652 HTML email files (~883 MB) from regular git objects to Git LF
 ## 2026-03-06: Read Tracking & Bookmarks (Browser Storage)
 
 Implement client-side read tracking and bookmarks using localStorage. Store module with Set cache, auto-mark-read on viewer open, bookmark toggle button in viewer, read state styling on email lists, read count on homepage cards, bookmarks badge in header, dedicated bookmarks page with search and newsletter labels.
+
+## 2026-03-07: Inline Action Buttons on Email List Rows
+
+Add interactive bookmark and read/unread toggle buttons directly on each email list row (newsletter page and bookmarks page). Buttons appear trailing on the right side of each row. Uses event delegation for efficiency with large lists. Clicking buttons toggles state without navigating to the email viewer.

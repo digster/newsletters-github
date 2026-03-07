@@ -240,16 +240,12 @@ const App = (() => {
       const item = document.createElement("a");
       item.href = viewerUrl(email.file, email.newsletter);
       item.className = "email-item";
+      item.setAttribute("data-file", email.file);
 
-      // Apply read state styling
-      if (Store.isRead(email.file)) {
-        item.classList.add("email-item--read");
-      }
+      const isRead = Store.isRead(email.file);
+      const isBookmarked = Store.isBookmarked(email.file);
 
-      // Bookmark indicator
-      const bookmarkHtml = Store.isBookmarked(email.file)
-        ? `<span class="email-item__bookmark" title="Bookmarked">${ICON.bookmarkSmall}</span>`
-        : "";
+      if (isRead) item.classList.add("email-item--read");
 
       // Optionally show newsletter name (for bookmarks page)
       const nlLabel = options.showNewsletter
@@ -257,12 +253,63 @@ const App = (() => {
         : "";
 
       item.innerHTML = `
-        ${bookmarkHtml}
-        <span class="email-item__date">${formatDate(email.date)}</span>
-        ${nlLabel}
-        <span class="email-item__subject">${escapeHtml(email.subject)}</span>
+        <span class="email-item__content">
+          <span class="email-item__date">${formatDate(email.date)}</span>
+          ${nlLabel}
+          <span class="email-item__subject">${escapeHtml(email.subject)}</span>
+        </span>
+        <span class="email-item__actions">
+          <button type="button" class="email-item__action-btn${isRead ? " email-item__action-btn--active" : ""}"
+                  data-action="toggle-read" title="${isRead ? "Mark as unread" : "Mark as read"}">
+            ${isRead ? ICON.eyeOpen : ICON.eyeClosed}
+          </button>
+          <button type="button" class="email-item__action-btn${isBookmarked ? " email-item__action-btn--active" : ""}"
+                  data-action="toggle-bookmark" title="${isBookmarked ? "Remove bookmark" : "Bookmark"}">
+            ${isBookmarked ? ICON.bookmarkFilled : ICON.bookmarkOutline}
+          </button>
+        </span>
       `;
       container.appendChild(item);
+    });
+
+    // Bind event delegation for action buttons (once per container)
+    bindListActions(container);
+  }
+
+  /** Event delegation handler for inline action buttons in email lists */
+  function bindListActions(container) {
+    if (container._actionsListenerBound) return;
+    container._actionsListenerBound = true;
+
+    container.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-action]");
+      if (!btn) return;
+
+      // Prevent navigation to viewer
+      e.preventDefault();
+      e.stopPropagation();
+
+      const row = btn.closest(".email-item");
+      const file = row?.getAttribute("data-file");
+      if (!file) return;
+
+      const action = btn.getAttribute("data-action");
+
+      if (action === "toggle-read") {
+        const nowRead = Store.toggleRead(file);
+        btn.innerHTML = nowRead ? ICON.eyeOpen : ICON.eyeClosed;
+        btn.title = nowRead ? "Mark as unread" : "Mark as read";
+        btn.classList.toggle("email-item__action-btn--active", nowRead);
+        row.classList.toggle("email-item--read", nowRead);
+      }
+
+      if (action === "toggle-bookmark") {
+        const nowBookmarked = Store.toggleBookmark(file);
+        btn.innerHTML = nowBookmarked ? ICON.bookmarkFilled : ICON.bookmarkOutline;
+        btn.title = nowBookmarked ? "Remove bookmark" : "Bookmark";
+        btn.classList.toggle("email-item__action-btn--active", nowBookmarked);
+        updateBookmarksBadge();
+      }
     });
   }
 
