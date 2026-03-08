@@ -1,5 +1,9 @@
 # Prompts
 
+## 2026-03-07: Add "Random Email" Feature
+
+Add a "Random" link on the homepage that navigates to a random email from the ~13.6K collection each time it's loaded. Create a lightweight `random.html` page that loads the manifest, picks a random email, and redirects to the viewer. Bookmarkable URL — each visit/refresh shows a different email. Add shuffle SVG icon in header next to Bookmarks link.
+
 ## 2026-03-05: Initial Implementation
 
 Implement the GitHub Pages site for Newsletter Archive. Python build script + client-side JS approach. Build script reads from ../newsletters/, parses YAML front matter, copies HTML email files, generates JSON manifest. Three pages: homepage (card grid), newsletter listing (date-sorted emails), email viewer (iframe). Modern minimal UI with dark mode. GitHub Actions deployment.
