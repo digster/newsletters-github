@@ -51,6 +51,27 @@ const App = (() => {
       return s.has(file);
     },
     getBookmarks() { return [...this._get("nl_bookmarks")]; },
+
+    // --- Key-value storage (for objects, not sets) ---
+    _getMap(key) {
+      if (!this._cache[key]) {
+        try {
+          this._cache[key] = JSON.parse(localStorage.getItem(key) || "{}");
+        } catch {
+          this._cache[key] = {};
+        }
+      }
+      return this._cache[key];
+    },
+
+    _saveMap(key) {
+      localStorage.setItem(key, JSON.stringify(this._cache[key]));
+    },
+
+    // --- Card colors ---
+    getCardColor(name)        { return this._getMap("nl_card_colors")[name] || null; },
+    setCardColor(name, color) { this._getMap("nl_card_colors")[name] = color; this._saveMap("nl_card_colors"); },
+    removeCardColor(name)     { delete this._getMap("nl_card_colors")[name]; this._saveMap("nl_card_colors"); },
   };
 
   // -----------------------------------------------------------
@@ -145,11 +166,21 @@ const App = (() => {
       return;
     }
 
+    // Detect theme for default color picker value
+    const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const defaultColor = isDark ? "#181a20" : "#ffffff";
+
     newsletters.forEach((nl) => {
       const card = document.createElement("a");
       card.href = newsletterUrl(nl.name);
       card.className = "card";
       card.setAttribute("data-name", nl.name.toLowerCase());
+
+      // Apply stored card color (if any)
+      const cardColor = Store.getCardColor(nl.name);
+      if (cardColor) {
+        card.style.setProperty("--card-bg", cardColor);
+      }
 
       const dateRange =
         nl.earliest && nl.latest
@@ -169,6 +200,11 @@ const App = (() => {
       }
 
       card.innerHTML = `
+        <label class="card__color-picker${cardColor ? " card__color-picker--active" : ""}" title="Pick card color">
+          <input type="color" class="card__color-input"
+                 value="${cardColor || defaultColor}"
+                 data-newsletter="${escapeHtml(nl.name)}">
+        </label>
         <div class="card__name">${escapeHtml(nl.name)}</div>
         <div class="card__meta">
           <div>
@@ -178,7 +214,48 @@ const App = (() => {
           <span class="card__dates">${dateRange}</span>
         </div>
       `;
+
+      // Set swatch background to show current color
+      if (cardColor) {
+        const picker = card.querySelector(".card__color-picker");
+        if (picker) picker.style.backgroundColor = cardColor;
+      }
+
       container.appendChild(card);
+    });
+  }
+
+  /** Event delegation for card color pickers — prevents navigation and handles color changes */
+  function bindCardColorPickers(container) {
+    if (container._colorListenerBound) return;
+    container._colorListenerBound = true;
+
+    // Prevent clicks on the color picker from navigating the <a> card
+    container.addEventListener("click", (e) => {
+      if (e.target.closest(".card__color-picker")) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    });
+
+    // Live-update card background as user picks a color
+    container.addEventListener("input", (e) => {
+      if (!e.target.classList.contains("card__color-input")) return;
+
+      const color = e.target.value;
+      const name = e.target.dataset.newsletter;
+      const card = e.target.closest(".card");
+      const picker = e.target.closest(".card__color-picker");
+
+      // Apply to card via CSS custom property (preserves hover behavior)
+      card.style.setProperty("--card-bg", color);
+
+      // Update swatch to show current color
+      picker.style.backgroundColor = color;
+      picker.classList.add("card__color-picker--active");
+
+      // Persist
+      Store.setCardColor(name, color);
     });
   }
 
@@ -197,6 +274,7 @@ const App = (() => {
       }
 
       renderNewsletterGrid(data.newsletters, grid, data.emails);
+      bindCardColorPickers(grid);
 
       // Update bookmarks badge count
       updateBookmarksBadge();

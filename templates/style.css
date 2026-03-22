@@ -66,6 +66,11 @@
     --accent-hover: #6da0f5;
     --accent-subtle: rgba(77, 138, 240, 0.1);
   }
+
+  /* Custom-colored card: lighten on hover in dark mode */
+  .card[style*="--card-bg"]:hover {
+    background: color-mix(in srgb, var(--card-bg) 88%, white);
+  }
 }
 
 /* ============================================================
@@ -249,13 +254,14 @@ a:hover {
 }
 
 .card {
+  position: relative;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   padding: var(--sp-4);
   border: 0.5px solid var(--border);
   border-radius: var(--radius-lg);
-  background: var(--bg-surface);
+  background: var(--card-bg, var(--bg-surface));
   cursor: pointer;
   transition: border-color 150ms var(--ease), background 150ms var(--ease);
   text-decoration: none;
@@ -267,6 +273,11 @@ a:hover {
   border-color: var(--border-strong);
   background: var(--bg-hover);
   color: inherit;
+}
+
+/* Custom-colored card: darken on hover (light mode) */
+.card[style*="--card-bg"]:hover {
+  background: color-mix(in srgb, var(--card-bg) 88%, black);
 }
 
 .card__name {
@@ -306,6 +317,52 @@ a:hover {
   color: var(--fg-muted);
   font-variant-numeric: tabular-nums;
   margin-top: 2px;
+}
+
+/* --- Card color picker swatch --- */
+
+.card__color-picker {
+  position: absolute;
+  top: var(--sp-2);
+  right: var(--sp-2);
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: var(--card-bg, var(--bg-surface));
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 150ms var(--ease), border-color 150ms var(--ease), transform 150ms var(--ease);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  padding: 0;
+}
+
+.card:hover .card__color-picker {
+  opacity: 1;
+}
+
+/* Always visible when a color has been set */
+.card__color-picker--active {
+  opacity: 1;
+}
+
+.card__color-picker:hover {
+  border-color: var(--border-strong);
+  transform: scale(1.15);
+}
+
+/* Hide the native color input — label is the click target */
+.card__color-input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  padding: 0;
+  border: none;
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* ============================================================

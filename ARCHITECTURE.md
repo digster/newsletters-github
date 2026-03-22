@@ -54,12 +54,15 @@ emails/                      # Copied HTML email files
 - `initBookmarks()` — loads bookmarked emails from localStorage, renders with newsletter labels and search
 - `initKeyboard()` — `/` to focus search, `Escape` to blur
 
-Internal `Store` module provides localStorage-backed persistence with in-memory `Set` cache:
-- `nl_read` — tracks read emails (file paths)
-- `nl_bookmarks` — tracks bookmarked emails (file paths)
-- JSON arrays serialized to localStorage, loaded into Sets for O(1) lookups
+Internal `Store` module provides localStorage-backed persistence with in-memory cache:
+- **Set-based** (`_get`/`_save`): `nl_read` (read emails), `nl_bookmarks` (bookmarked emails) — JSON arrays serialized to Sets for O(1) lookups
+- **Map-based** (`_getMap`/`_saveMap`): `nl_card_colors` (newsletter name → hex color) — JSON objects for key-value storage
 
 All data comes from a single `data/index.json` fetch cached in memory.
+
+### Card Color Picker
+
+Homepage cards have a color picker swatch (top-right corner) that lets users customize each card's background. Uses a `<label>` wrapping a hidden `<input type="color">` — the label is the styled 16px circle, the native input provides the OS color picker. Card background is set via CSS custom property `--card-bg` (not inline `backgroundColor`) so that hover states in the stylesheet can reference and darken/lighten the color with `color-mix()`. Colors persist in `nl_card_colors` localStorage via the `Store._getMap`/`_saveMap` key-value methods. Event delegation on the grid container (`bindCardColorPickers`) prevents `<a>` navigation on click and live-updates the card on `input` events.
 
 ### List-Level Actions (Event Delegation)
 
