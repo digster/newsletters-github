@@ -73,6 +73,56 @@
   }
 }
 
+/* Manual theme overrides via data-theme attribute (set by JS toggle) */
+/* These mirror the media query values so manual selection works.     */
+
+html[data-theme="dark"] {
+  --bg: #0f1117;
+  --bg-surface: #181a20;
+  --bg-hover: #1e2028;
+  --bg-active: #252730;
+
+  --fg: #e4e7eb;
+  --fg-secondary: #9ba3b0;
+  --fg-muted: #6b7280;
+  --fg-faint: #3b4048;
+
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+
+  --accent: #4d8af0;
+  --accent-hover: #6da0f5;
+  --accent-subtle: rgba(77, 138, 240, 0.1);
+}
+
+html[data-theme="dark"] .card[style*="--card-bg"]:hover {
+  background: color-mix(in srgb, var(--card-bg) 88%, white);
+}
+
+/* Explicit light override — needed when user picks light while OS prefers dark */
+html[data-theme="light"] {
+  --bg: #fafbfc;
+  --bg-surface: #ffffff;
+  --bg-hover: #f3f5f7;
+  --bg-active: #eef1f4;
+
+  --fg: #1a1d21;
+  --fg-secondary: #4a5568;
+  --fg-muted: #8895a7;
+  --fg-faint: #c1c9d4;
+
+  --border: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.14);
+
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-subtle: rgba(37, 99, 235, 0.08);
+}
+
+html[data-theme="light"] .card[style*="--card-bg"]:hover {
+  background: color-mix(in srgb, var(--card-bg) 88%, black);
+}
+
 /* ============================================================
    Reset & Base
    ============================================================ */
@@ -210,6 +260,28 @@ a:hover {
   font-size: 12px;
   color: var(--fg-muted);
   font-variant-numeric: tabular-nums;
+}
+
+/* --- Theme toggle button --- */
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+  transition: color 150ms var(--ease), background 150ms var(--ease);
+}
+
+.theme-toggle:hover {
+  color: var(--accent);
+  background: var(--bg-hover);
 }
 
 /* ============================================================

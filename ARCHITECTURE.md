@@ -52,6 +52,7 @@ emails/                      # Copied HTML email files
 - `initNewsletter()` — filters manifest by newsletter name, renders date-sorted email list with read/bookmark state
 - `initViewer()` — sets iframe src, auto-marks email as read, loads prev/next navigation, bookmark toggle
 - `initBookmarks()` — loads bookmarked emails from localStorage, renders with newsletter labels and search
+- `initThemeToggle()` — initializes the theme toggle button (home page only), cycles through system/light/dark
 - `initKeyboard()` — `/` to focus search, `Escape` to blur
 
 Internal `Store` module provides localStorage-backed persistence with in-memory cache:
@@ -59,6 +60,10 @@ Internal `Store` module provides localStorage-backed persistence with in-memory 
 - **Map-based** (`_getMap`/`_saveMap`): `nl_card_colors` (newsletter name → hex color) — JSON objects for key-value storage
 
 All data comes from a single `data/index.json` fetch cached in memory.
+
+### Theme Management
+
+Three-state theme toggle (System / Light / Dark) on the home page header. Preference persisted in `localStorage` key `nl_theme` (`"light"`, `"dark"`, or absent for system auto). CSS uses `html[data-theme="dark"]` and `html[data-theme="light"]` attribute selectors to override the default `@media (prefers-color-scheme: dark)` media query when the user makes a manual choice. A synchronous inline `<script>` in every page's `<head>` sets the `data-theme` attribute before the stylesheet loads to prevent flash of wrong theme (FOUC). Internal `Theme` module in `app.js` manages state and cycling. Toggle button only on home page; preference respected on all pages.
 
 ### Card Color Picker
 

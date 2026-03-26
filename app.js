@@ -75,6 +75,59 @@ const App = (() => {
   };
 
   // -----------------------------------------------------------
+  // Theme Management (three-state: system / light / dark)
+  // -----------------------------------------------------------
+
+  const Theme = {
+    STORAGE_KEY: "nl_theme",
+
+    /** Returns "light", "dark", or null (system/auto) */
+    getStored() {
+      try {
+        const v = localStorage.getItem(this.STORAGE_KEY);
+        return v === "light" || v === "dark" ? v : null;
+      } catch { return null; }
+    },
+
+    /** Persist preference. Pass null to clear (revert to system). */
+    setStored(theme) {
+      try {
+        if (theme) localStorage.setItem(this.STORAGE_KEY, theme);
+        else localStorage.removeItem(this.STORAGE_KEY);
+      } catch { /* localStorage unavailable */ }
+    },
+
+    /** Resolved theme: "light" or "dark" based on stored pref or system */
+    getEffective() {
+      const stored = this.getStored();
+      if (stored) return stored;
+      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    },
+
+    /** Apply theme to the document via data-theme attribute */
+    apply(theme) {
+      if (theme) {
+        document.documentElement.dataset.theme = theme;
+      } else {
+        delete document.documentElement.dataset.theme;
+      }
+    },
+
+    /** Cycle: system → light → dark → system. Returns new stored value (or null). */
+    cycle() {
+      const stored = this.getStored();
+      let next;
+      if (stored === null) next = "light";
+      else if (stored === "light") next = "dark";
+      else next = null;
+
+      this.setStored(next);
+      this.apply(next);
+      return next;
+    },
+  };
+
+  // -----------------------------------------------------------
   // SVG Icons (inline to avoid external dependencies)
   // -----------------------------------------------------------
 
@@ -84,6 +137,9 @@ const App = (() => {
     bookmarkSmall: '<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" stroke="currentColor" stroke-width="1.5"><path d="M3.5 2.5h9v12L8 11l-4.5 3.5v-12z"/></svg>',
     eyeOpen: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
     eyeClosed: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>',
+    themeSun: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>',
+    themeMoon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>',
+    themeSystem: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
   };
 
   // -----------------------------------------------------------
@@ -167,8 +223,7 @@ const App = (() => {
     }
 
     // Detect theme for default color picker value
-    const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const defaultColor = isDark ? "#181a20" : "#ffffff";
+    const defaultColor = Theme.getEffective() === "dark" ? "#181a20" : "#ffffff";
 
     newsletters.forEach((nl) => {
       const card = document.createElement("a");
@@ -615,6 +670,48 @@ const App = (() => {
   }
 
   // -----------------------------------------------------------
+  // Theme Toggle (home page only)
+  // -----------------------------------------------------------
+
+  /** Returns the icon SVG for the current stored theme state */
+  function getThemeIcon(stored) {
+    if (stored === "light") return ICON.themeSun;
+    if (stored === "dark") return ICON.themeMoon;
+    return ICON.themeSystem;
+  }
+
+  /** Returns the tooltip text for the current stored theme state */
+  function getThemeTitle(stored) {
+    if (stored === "light") return "Theme: Light — click for Dark";
+    if (stored === "dark") return "Theme: Dark — click for System";
+    return "Theme: System — click for Light";
+  }
+
+  function initThemeToggle() {
+    const btn = document.getElementById("theme-toggle-btn");
+    if (!btn) return;
+
+    // Set initial icon based on stored preference
+    const stored = Theme.getStored();
+    btn.innerHTML = getThemeIcon(stored);
+    btn.title = getThemeTitle(stored);
+
+    // Click cycles through system → light → dark → system
+    btn.addEventListener("click", () => {
+      const next = Theme.cycle();
+      btn.innerHTML = getThemeIcon(next);
+      btn.title = getThemeTitle(next);
+    });
+
+    // When OS preference changes and user is in "system" mode, update icon
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+      if (!Theme.getStored()) {
+        btn.innerHTML = getThemeIcon(null);
+      }
+    });
+  }
+
+  // -----------------------------------------------------------
   // Keyboard Navigation
   // -----------------------------------------------------------
 
@@ -649,5 +746,6 @@ const App = (() => {
     initViewer,
     initBookmarks,
     initKeyboard,
+    initThemeToggle,
   };
 })();

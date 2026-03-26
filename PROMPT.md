@@ -35,3 +35,7 @@ Add interactive bookmark and read/unread toggle buttons directly on each email l
 ## 2026-03-13: Add Input Directory CLI Argument to build_site.py
 
 Add a CLI argument to `build_site.py` so the source newsletters directory can be specified at runtime instead of being hardcoded. Uses argparse with a positional optional argument (`nargs="?"`) defaulting to the existing `../newsletters/` path.
+
+## 2026-03-26: Add Dark Mode Switcher
+
+Add a dark mode switcher on the top right of the home page.
