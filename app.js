@@ -287,9 +287,13 @@ const App = (() => {
 
     // Prevent clicks on the color picker from navigating the <a> card
     container.addEventListener("click", (e) => {
-      if (e.target.closest(".card__color-picker")) {
+      const picker = e.target.closest(".card__color-picker");
+      if (picker) {
         e.preventDefault();
         e.stopPropagation();
+        // preventDefault blocks <label>'s native activation, so trigger manually
+        const input = picker.querySelector(".card__color-input");
+        if (input) input.click();
       }
     });
 
