@@ -394,6 +394,7 @@ const App = (() => {
           <span class="email-item__date">${formatDate(email.date)}</span>
           ${nlLabel}
           <span class="email-item__subject">${escapeHtml(email.subject)}</span>
+          <span class="email-item__preview" aria-hidden="true"></span>
         </span>
         <span class="email-item__actions">
           <button type="button" class="email-item__action-btn${isRead ? " email-item__action-btn--active" : ""}"
@@ -411,6 +412,10 @@ const App = (() => {
 
     // Bind event delegation for action buttons (once per container)
     bindListActions(container);
+
+    // Lazy-load inline previews as rows enter viewport + hover tooltip
+    initPreviewObserver(container);
+    initPreviewTooltip(container);
   }
 
   /** Event delegation handler for inline action buttons in email lists */
@@ -448,6 +453,257 @@ const App = (() => {
         updateBookmarksBadge();
       }
     });
+  }
+
+  // -----------------------------------------------------------
+  // Email Body Previews (lazy fetch + inline snippet + hover tooltip)
+  // -----------------------------------------------------------
+  // Strategy: emails are served as static HTML files. When a row enters the
+  // viewport we fetch its HTML once, extract a plain-text preview, and cache
+  // both a single-line snippet (for inline display after the subject) and a
+  // longer paragraph-preserving excerpt (for the hover tooltip). Fetches are
+  // capped to PREVIEW_MAX_CONCURRENT to avoid bursting on fast scroll.
+
+  const PreviewCache = new Map();     // file -> { short, long }
+  const PreviewInflight = new Map();  // file -> Promise<{short, long}>
+  const PreviewQueue = [];            // deferred runners when at capacity
+  let previewActive = 0;
+
+  const PREVIEW_MAX_CONCURRENT = 4;
+  const PREVIEW_HOVER_DELAY_MS = 2000; // per user spec: "more than two seconds"
+  const PREVIEW_SHORT_CHARS = 160;
+  const PREVIEW_LONG_CHARS = 500;
+
+  /** Truncate to word boundary where possible, appending an ellipsis. */
+  function truncatePreview(text, max) {
+    if (!text) return "";
+    if (text.length <= max) return text;
+    const cut = text.slice(0, max);
+    const lastSpace = cut.lastIndexOf(" ");
+    const trimmed = lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut;
+    return trimmed.trimEnd() + "…";
+  }
+
+  /**
+   * Parse an email's HTML and extract a { short, long } preview pair.
+   * `short` is a single-line snippet; `long` preserves paragraph breaks
+   * (block elements collapse to newlines). Non-visible nodes are stripped.
+   */
+  function extractPreviewText(html) {
+    let doc;
+    try {
+      doc = new DOMParser().parseFromString(html, "text/html");
+    } catch {
+      return { short: "", long: "" };
+    }
+    const body = doc.body;
+    if (!body) return { short: "", long: "" };
+
+    // Strip non-rendering and explicitly hidden elements
+    body.querySelectorAll("script, style, noscript, link, meta, template, [hidden]")
+      .forEach((el) => el.remove());
+    body.querySelectorAll('[style*="display:none" i], [style*="display: none" i]')
+      .forEach((el) => el.remove());
+
+    // Walk the DOM and emit one line per block element; collapse whitespace runs.
+    const blockTags = /^(P|DIV|SECTION|ARTICLE|HEADER|FOOTER|LI|UL|OL|TR|TD|TH|H[1-6]|BLOCKQUOTE|PRE|HR|FIGURE)$/;
+    const lines = [];
+    let buffer = "";
+
+    const flush = () => {
+      const cleaned = buffer.replace(/\s+/g, " ").trim();
+      if (cleaned) lines.push(cleaned);
+      buffer = "";
+    };
+
+    const walk = (node) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        buffer += " " + node.nodeValue;
+        return;
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return;
+      if (node.tagName === "BR") { flush(); return; }
+      const isBlock = blockTags.test(node.tagName);
+      if (isBlock) flush();
+      for (const child of node.childNodes) walk(child);
+      if (isBlock) flush();
+    };
+
+    walk(body);
+    flush();
+
+    const longRaw = lines.join("\n\n").trim();
+    const shortRaw = lines.join(" ").replace(/\s+/g, " ").trim();
+
+    return {
+      short: truncatePreview(shortRaw, PREVIEW_SHORT_CHARS),
+      long: truncatePreview(longRaw, PREVIEW_LONG_CHARS),
+    };
+  }
+
+  /** Fetch + cache a preview for a single email file (deduped, throttled). */
+  function fetchPreview(file) {
+    if (PreviewCache.has(file)) return Promise.resolve(PreviewCache.get(file));
+    const inflight = PreviewInflight.get(file);
+    if (inflight) return inflight;
+
+    const promise = new Promise((resolve) => {
+      const run = () => {
+        previewActive++;
+        fetch(file)
+          .then((r) => (r.ok ? r.text() : ""))
+          .catch(() => "")
+          .then((text) => {
+            const preview = text ? extractPreviewText(text) : { short: "", long: "" };
+            PreviewCache.set(file, preview);
+            PreviewInflight.delete(file);
+            previewActive--;
+            resolve(preview);
+            const next = PreviewQueue.shift();
+            if (next) next();
+          });
+      };
+      if (previewActive < PREVIEW_MAX_CONCURRENT) run();
+      else PreviewQueue.push(run);
+    });
+
+    PreviewInflight.set(file, promise);
+    return promise;
+  }
+
+  /**
+   * Observe rows in a list container and populate their inline preview
+   * snippet the first time they come into view. Safe to call repeatedly;
+   * reuses a single observer per container and re-scans on each call.
+   */
+  function initPreviewObserver(container) {
+    if (!("IntersectionObserver" in window)) return;
+
+    if (container._previewObserver) container._previewObserver.disconnect();
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const row = entry.target;
+          observer.unobserve(row);
+
+          const file = row.getAttribute("data-file");
+          const slot = row.querySelector(".email-item__preview");
+          if (!file || !slot || slot.textContent) continue;
+
+          fetchPreview(file).then(({ short }) => {
+            if (short && !slot.textContent) slot.textContent = short;
+          });
+        }
+      },
+      { root: null, rootMargin: "200px 0px" }
+    );
+
+    container.querySelectorAll(".email-item").forEach((row) => observer.observe(row));
+    container._previewObserver = observer;
+  }
+
+  /** Shared tooltip element (one per page) for hover previews. */
+  let _previewTooltipEl = null;
+  function ensurePreviewTooltipEl() {
+    if (_previewTooltipEl) return _previewTooltipEl;
+    const el = document.createElement("div");
+    el.className = "preview-tooltip";
+    el.setAttribute("role", "tooltip");
+    el.hidden = true;
+    document.body.appendChild(el);
+    _previewTooltipEl = el;
+    return el;
+  }
+
+  /** Position the tooltip below the row, flipping above and clamping to the viewport. */
+  function positionPreviewTooltip(el, rowRect) {
+    const margin = 8;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    // Measure natural size while rendered but visually hidden.
+    // Uses `visibility: hidden` (still in layout tree) rather than the `hidden`
+    // attribute (removed from layout) so offsetWidth/offsetHeight are valid.
+    el.hidden = false;
+    el.style.visibility = "hidden";
+    const tw = el.offsetWidth;
+    const th = el.offsetHeight;
+    el.style.visibility = "";
+
+    let top = rowRect.bottom + margin;
+    let left = rowRect.left;
+
+    if (left + tw > vw - margin) left = vw - margin - tw;
+    if (left < margin) left = margin;
+
+    if (top + th > vh - margin) {
+      const flipped = rowRect.top - th - margin;
+      if (flipped >= margin) top = flipped;
+      else top = Math.max(margin, vh - margin - th);
+    }
+
+    el.style.top = top + window.scrollY + "px";
+    el.style.left = left + window.scrollX + "px";
+  }
+
+  /** Delegated hover tooltip: shows after PREVIEW_HOVER_DELAY_MS of sustained hover. */
+  function initPreviewTooltip(container) {
+    if (container._previewTooltipBound) return;
+    container._previewTooltipBound = true;
+
+    let hoverTimer = null;
+    let activeRow = null;
+
+    const hideTooltip = () => {
+      if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
+      activeRow = null;
+      const el = _previewTooltipEl;
+      if (!el) return;
+      el.removeAttribute("data-visible");
+      // Leave display removed until fade-out completes
+      setTimeout(() => {
+        if (!el.hasAttribute("data-visible")) el.hidden = true;
+      }, 150);
+    };
+
+    container.addEventListener("mouseover", (e) => {
+      const row = e.target.closest(".email-item");
+      if (!row || row === activeRow) return;
+
+      // Switched rows mid-hover: reset state
+      if (activeRow || hoverTimer) hideTooltip();
+
+      activeRow = row;
+      const file = row.getAttribute("data-file");
+      if (!file) return;
+
+      hoverTimer = setTimeout(() => {
+        hoverTimer = null;
+        fetchPreview(file).then(({ long }) => {
+          if (activeRow !== row || !long) return;
+          const el = ensurePreviewTooltipEl();
+          el.textContent = long;
+          el.hidden = false;
+          positionPreviewTooltip(el, row.getBoundingClientRect());
+          requestAnimationFrame(() => el.setAttribute("data-visible", "true"));
+        });
+      }, PREVIEW_HOVER_DELAY_MS);
+    });
+
+    container.addEventListener("mouseout", (e) => {
+      const row = e.target.closest(".email-item");
+      if (!row || row !== activeRow) return;
+      // mouseout also fires moving between child elements — ignore those
+      if (e.relatedTarget && row.contains(e.relatedTarget)) return;
+      hideTooltip();
+    });
+
+    // Kill the tooltip on any interaction that changes layout or intent
+    container.addEventListener("mousedown", hideTooltip);
+    window.addEventListener("scroll", hideTooltip, { passive: true });
+    window.addEventListener("resize", hideTooltip);
   }
 
   function initNewsletter() {

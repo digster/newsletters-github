@@ -69,6 +69,19 @@ Three-state theme toggle (System / Light / Dark) on the home page header. Prefer
 
 Homepage cards have a color picker swatch (top-right corner) that lets users customize each card's background. Uses a `<label>` wrapping a hidden `<input type="color">` — the label is the styled 16px circle, the native input provides the OS color picker. Card background is set via CSS custom property `--card-bg` (not inline `backgroundColor`) so that hover states in the stylesheet can reference and darken/lighten the color with `color-mix()`. Colors persist in `nl_card_colors` localStorage via the `Store._getMap`/`_saveMap` key-value methods. Event delegation on the grid container (`bindCardColorPickers`) prevents `<a>` navigation on click and live-updates the card on `input` events.
 
+### Email Body Previews (Lazy Fetch)
+
+Each row in an email list shows a Gmail-style inline preview (`subject — muted snippet`) plus a hover tooltip with the first few lines of the body after a 2-second sustained hover. Previews are generated client-side at runtime — the manifest (`data/index.json`) stays lean. The flow:
+
+1. `renderEmailList` adds an empty `<span class="email-item__preview">` after the subject and calls `initPreviewObserver(container)` + `initPreviewTooltip(container)`.
+2. An `IntersectionObserver` (rootMargin `200px`) notices rows as they scroll into view. For each, `fetchPreview(file)` fetches the HTML file, runs it through `extractPreviewText` (DOMParser-based; strips scripts/styles/hidden nodes, collapses whitespace, preserves block boundaries as line breaks), and caches a `{ short, long }` pair keyed by file path.
+3. `short` (≤160 chars, single line) fills the inline span. `long` (≤500 chars, paragraph breaks preserved) fuels the hover tooltip. Both forms come from a single fetch.
+4. Concurrent fetches are capped at 4 via a small queue (`PREVIEW_MAX_CONCURRENT`) and deduplicated via an in-flight map, preventing request stampedes on fast scrolling.
+5. The hover tooltip is a single `<div class="preview-tooltip">` appended once to `<body>`, positioned absolutely below the row (flipped above when there's no room below) via `positionPreviewTooltip`. Delegated `mouseover`/`mouseout` listeners on the list container — with `relatedTarget` containment checks — avoid flicker across child elements.
+6. Cache is in-memory only (page-lifetime `Map`); the browser's HTTP cache handles reuse across page navigations.
+
+The feature piggybacks on the shared `renderEmailList`, so both the newsletter listing page and the bookmarks page get previews for free.
+
 ### List-Level Actions (Event Delegation)
 
 Email list rows have inline action buttons (read toggle, bookmark toggle) that modify state without navigating to the viewer. This uses **event delegation**: a single click listener is attached to the list container (not per-button), and `e.target.closest("[data-action]")` identifies the clicked button. `e.preventDefault()` + `e.stopPropagation()` prevents the parent `<a>` link from navigating. The listener is bound once per container via a `_actionsListenerBound` flag to survive re-renders.

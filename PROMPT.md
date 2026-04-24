@@ -39,3 +39,7 @@ Add a CLI argument to `build_site.py` so the source newsletters directory can be
 ## 2026-03-26: Add Dark Mode Switcher
 
 Add a dark mode switcher on the top right of the home page.
+
+## 2026-04-24: Inline Preview + Hover Tooltip in Newsletter List
+
+Inside a newsletter list there should be a preview next to the subject (Gmail-style muted snippet after an em-dash). Also, a preview of the first few lines should be shown in a tooltip when we hover for more than two seconds.

@@ -476,10 +476,38 @@ a:hover {
   color: var(--fg);
   line-height: 1.4;
   min-width: 0;
+  /* Single-line truncation so the inline preview sits beside, not below */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 55%;
+  flex-shrink: 0;
 }
 
 .email-item:hover .email-item__subject {
   color: var(--accent);
+}
+
+/* Inline preview — muted excerpt shown after the subject (Gmail-style) */
+.email-item__preview {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--fg-muted);
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Separator rendered only when preview is actually populated */
+.email-item__preview:not(:empty)::before {
+  content: " — ";
+  color: var(--fg-faint);
+}
+
+.email-item--read .email-item__preview {
+  color: var(--fg-faint);
 }
 
 /* Divider between items */
@@ -558,6 +586,40 @@ a:hover {
   padding: 1px var(--sp-2);
   border-radius: var(--radius-sm);
   white-space: nowrap;
+}
+
+/* ============================================================
+   Hover Preview Tooltip (first few lines of an email)
+   Shared element appended once to <body>, positioned absolutely
+   relative to the document. Shown after a sustained 2s hover.
+   ============================================================ */
+
+.preview-tooltip {
+  position: absolute;
+  z-index: 100;
+  max-width: 480px;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--bg-surface);
+  color: var(--fg-secondary);
+  border: 0.5px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  opacity: 0;
+  transition: opacity 120ms var(--ease);
+  pointer-events: none;
+}
+
+.preview-tooltip[data-visible="true"] {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preview-tooltip {
+    transition: none;
+  }
 }
 
 /* ============================================================
